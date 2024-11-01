@@ -1,4 +1,8 @@
-env/
-__pycache__/
-*.pyc
-*.pyo
+cacao_env
+
+Modelo_Cacao_Colombia (1).ipynb
+
+key-app-server.pem
+
+cacao_env_py
+cacao_rf_model.pkl

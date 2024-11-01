@@ -1,15 +1,19 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import joblib
 import pandas as pd
+import onnxruntime as rt
 
-# Cargar el modelo desde el archivo .pkl
-rf_model = joblib.load("cacao_rf_model.pkl")
+# Load the ONNX model
+try:
+    session = rt.InferenceSession("cacao_rf_model.onnx")
+    print("Modelo ONNX cargado exitosamente.")
+except Exception as e:
+    print("Error al cargar el modelo ONNX:", e)
 
-# Crear la instancia de FastAPI
+# Create the FastAPI instance
 app = FastAPI()
 
-# Definir el modelo de datos para la solicitud
+# Define the data model for the request
 class PredictionRequest(BaseModel):
     Area_Sembrada: float
     Area_Cosechada: float
@@ -17,24 +21,27 @@ class PredictionRequest(BaseModel):
 
 @app.post("/predict")
 def predict(request: PredictionRequest):
-    # Extraer los datos de la solicitud
-    input_data = pd.DataFrame([[request.Area_Sembrada, request.Area_Cosechada, request.Produccion]], 
-                              columns=['Area_Sembrada', 'Area_Cosechada', 'Produccion'])
-
-    # Realizar la predicción
-    try:
-        prediction = rf_model.predict(input_data)[0]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # Prepare the input data as a list of lists for ONNX
+    input_data = [[request.Area_Sembrada, request.Area_Cosechada, request.Produccion]]
     
-    return {"Rendimiento_Predicho": prediction}
+    # Run prediction with ONNX Runtime
+    try:
+        input_name = session.get_inputs()[0].name
+        prediction = session.run(None, {input_name: input_data})[0][0]
+        # Convert the prediction to a simple float for JSON serialization
+        predicted_value = float(prediction)
+    except Exception as e:
+        print("Error al realizar la predicción:", e)
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+    
+    return {"Rendimiento_Predicho": predicted_value}
 
-# Endpoint de prueba para la raíz
+# Root endpoint for testing
 @app.get("/")
 def read_root():
-    return {"message": "Hello World!"}
+    return {"message": "Modelo Cacao listo"}
 
-# Si ejecutas el archivo directamente
+# Run with Uvicorn
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5000)
